@@ -24,7 +24,6 @@
 #include <sys/time.h>
 #include <stdbool.h>
 #define MAXDATASIZE 1000 // max number of bytes we can get at once
-#define PACKETSIZE 1500
 // get sockaddr, IPv4 or IPv6:
 
 void *get_in_addr(struct sockaddr *sa) {
@@ -115,36 +114,73 @@ int main(int argc, char *argv[]) {
         close(sockfd);
         return 0;
     }
-    /*
-    char* buffer[PACKETSIZE];
-    
+
     FILE *fp;
-    *fp = FILE *fopen(filename,"rb");
-    
+    fp = fopen(filename, "rb");
+
     fseek(fp, 0L, SEEK_END);
     int size = ftell(fp);
-    int Parts = (size/1000) +1;
-    
-    for(int i=0; i< Parts;i++){
-        int sizeOfThisPart = 0;
-        if(i+1!=Parts)
-            sizeOfThisPart=1000;
+    rewind(fp);
+    int Parts = (size / MAXDATASIZE) + 1;
+
+    for (int i = 0; i < Parts; i++) {
+        int sizeOfThisPart;
+        if (i + 1 != Parts)
+            sizeOfThisPart = MAXDATASIZE;
         else
-            sizeOfThisPart=size-i*1000;
-        fprintf("%d:%d:%d:%s:",Parts,i+1,sizeOfThisPart,filename);
-        
+            sizeOfThisPart = size - i*MAXDATASIZE;
+        char header[255];
+        sprintf(header, "%d:%d:%d:%s:\0", Parts, i + 1, sizeOfThisPart, filename);
+        char buffer[sizeOfThisPart + strlen(header)];
+        char* data = buffer + strlen(header);
+        strcpy(buffer, header);
+        fread(data, 1, sizeOfThisPart, fp);
+
+        struct timeval sent, now;
+
+        if (send(sockfd, buffer, sizeof (buffer), 0) == -1)
+            perror("send");
+
+        gettimeofday(&sent, 0);
+
+        if ((numbytes = recv(sockfd, buf, MAXDATASIZE - 1, 0)) == -1) {
+            perror("recv");
+            exit(1);
+        }
+        buf[numbytes] = '\0';
+
+        gettimeofday(&now, 0);
+
+        while (!(strcmp(buf, "ACK") == 0)) {
+            if (now.tv_sec - sent.tv_sec > 5) {//lost packet
+                printf("resending\n");
+                
+                if (send(sockfd, buffer, sizeof (buffer), 0) == -1)
+                    perror("send");
+
+                gettimeofday(&sent, 0);
+
+                if ((numbytes = recv(sockfd, buf, MAXDATASIZE - 1, 0)) == -1) {
+                    perror("recv");
+                    exit(1);
+                }
+                buf[numbytes] = '\0';
+            }
+            gettimeofday(&now, 0);
+        }
+
     }
-    
-    
-    */
-    
-    
-    
-    
-    
-    
-    
-    
+
+
+
+
+
+
+
+
+
+
+
     close(sockfd);
     return 0;
 }
