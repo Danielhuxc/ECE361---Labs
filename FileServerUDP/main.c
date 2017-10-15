@@ -21,7 +21,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#define MAXDATASIZE 1000
+#define MAXDATASIZE 1255
 // get sockaddr, IPv4 or IPv6:
 
 void *get_in_addr(struct sockaddr *sa) {
@@ -104,7 +104,118 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        
+        if ((numbytes = recvfrom(sockfd, buf, MAXDATASIZE - 1, 0,
+                (struct sockaddr *) &their_addr, &addr_len)) == -1) {
+            perror("recv");
+            exit(1);
+        }
+        printf("%d bytes received\n", numbytes);
+
+        int total, frag_no, size;
+        int iterator = 0;
+        char temp[255];
+
+        for (int i = 0; buf[iterator] != ':'; i++) {
+            temp[i] = buf[iterator];
+            temp[i + 1] = '\0';
+            iterator++;
+        }
+        total = atoi(temp);
+        iterator++;
+
+        for (int i = 0; buf[iterator] != ':'; i++) {
+            temp[i] = buf[iterator];
+            temp[i + 1] = '\0';
+            iterator++;
+        }
+
+        frag_no = atoi(temp);
+        iterator++;
+
+        for (int i = 0; buf[iterator] != ':'; i++) {
+            temp[i] = buf[iterator];
+            temp[i + 1] = '\0';
+            iterator++;
+        }
+
+        size = atoi(temp);
+        iterator++;
+
+        for (int i = 0; buf[iterator] != ':'; i++) {
+            temp[i] = buf[iterator];
+            temp[i + 1] = '\0';
+            iterator++;
+        }
+        iterator++;
+
+        char* file_frag = buf + iterator;
+
+        printf("filename: %s, headerlength: %d, Total:%d,Frag_no:%d,Size:%d\n", temp, iterator, total, frag_no, size);
+
+        FILE *fp;
+        fp = fopen(temp, "wb");
+        fwrite(file_frag, 1, size, fp);
+
+        if ((numbytes = sendto(sockfd, "ACK", 3, 0,
+                    (struct sockaddr *) &their_addr, addr_len)) == -1)
+            perror("send");
+
+        for (int i = 0; i < total - 1; i++) {
+            if ((numbytes = recvfrom(sockfd, buf, MAXDATASIZE - 1, 0,
+                (struct sockaddr *) &their_addr, &addr_len)) == -1) {
+                perror("recv");
+                exit(1);
+            }
+            printf("%d bytes received\n", numbytes);
+
+            int iterator = 0;
+
+            for (int i = 0; buf[iterator] != ':'; i++) {
+                temp[i] = buf[iterator];
+                temp[i + 1] = '\0';
+                iterator++;
+            }
+            total = atoi(temp);
+            iterator++;
+
+            for (int i = 0; buf[iterator] != ':'; i++) {
+                temp[i] = buf[iterator];
+                temp[i + 1] = '\0';
+                iterator++;
+            }
+
+            frag_no = atoi(temp);
+            iterator++;
+
+            for (int i = 0; buf[iterator] != ':'; i++) {
+                temp[i] = buf[iterator];
+                temp[i + 1] = '\0';
+                iterator++;
+            }
+
+            size = atoi(temp);
+            iterator++;
+
+            for (int i = 0; buf[iterator] != ':'; i++) {
+                temp[i] = buf[iterator];
+                temp[i + 1] = '\0';
+                iterator++;
+            }
+            iterator++;
+
+            char* file_frag = buf + iterator;
+
+            printf("filename: %s, headerlength: %d, Total:%d,Frag_no:%d,Size:%d\n", temp, iterator, total, frag_no, size);
+            fwrite(file_frag, 1, size, fp);
+
+            /*Sec 4
+            if ((numbytes = sendto(sockfd, "ACK", 3, 0,
+                    (struct sockaddr *) &their_addr, addr_len)) == -1)
+                perror("send");
+            */
+        }
+
+        fclose(fp);
     }
     close(sockfd);
     return 0;
