@@ -68,12 +68,15 @@ int main(int argc, char *argv[]) {
     char filename[MAXDATASIZE];
     printf("Intput (ftp filename):");
     scanf("%s %s", input, filename);
-    
-    if(strcmp(input,"ftp")!=0){
+
+    if (strcmp(input, "ftp") != 0) {
         printf("invalid argument");
         return 0;
     }
 
+    struct timeval start, end;
+
+    gettimeofday(&start, 0);
 
     if (access(filename, F_OK) != -1) {
         if ((numbytes = sendto(sockfd, "ftp", 3, 0,
@@ -93,6 +96,10 @@ int main(int argc, char *argv[]) {
         perror("recvfrom");
         exit(1);
     }
+
+    gettimeofday(&end, 0);
+    printf("round trip time was %10ld ms\n", end.tv_usec - start.tv_usec);
+
     buf[numbytes] = '\0';
 
     if (strcmp(buf, "yes") == 0) {
@@ -103,8 +110,64 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
+    FILE *fp;
+    fp = fopen(filename, "rb");
+
+    fseek(fp, 0L, SEEK_END);
+    int size = ftell(fp);
+    rewind(fp);
+    int Parts = (size / MAXDATASIZE) + 1;
+
+    //making ack buffer
+    char ack[4];
+    fd_set readfds;
+    FD_SET(sockfd, &readfds);
+    struct timeval timeout;
+    timeout.tv_sec = 5;
+
+    for (int i = 0; i < Parts; i++) {
+        //reset ack
+        bzero(ack, 4);
+        int sizeOfThisPart;
+        if (i + 1 != Parts)
+            sizeOfThisPart = MAXDATASIZE;
+        else
+            sizeOfThisPart = size - i*MAXDATASIZE;
+        char header[255];
+        sprintf(header, "%d:%d:%d:%s:\0", Parts, i + 1, sizeOfThisPart, filename);
+        char buffer[sizeOfThisPart + strlen(header)];
+        char* data = buffer + strlen(header);
+        strcpy(buffer, header);
+        fread(data, 1, sizeOfThisPart, fp);
+
+        //take this out in Sec 4
+        if (sendto(sockfd, buffer, sizeof (buffer), 0,
+                p->ai_addr, p->ai_addrlen) == -1)
+            perror("send");
+        /*Sec 4
+
+        while (strcmp(ack,"ACK")!=0) {
+            if (sendto(sockfd, buffer, sizeof (buffer), 0,
+                    p->ai_addr, p->ai_addrlen) == -1)
+                perror("send");
+
+            if (rv = select(sockfd + 1, &readfds, NULL, NULL, &timeout) > 0) {
+                if ((numbytes = recvfrom(sockfd, ack, 4, 0,
+                        (struct sockaddr *) &their_addr, &addr_len)) == -1) {
+                    perror("recv");
+                    exit(1);
+                }
+            }
+
+            //timeout
+            if (rv == 0)
+                printf("timeout\n");
+        }
+         */
+
+    }
+
     freeaddrinfo(servinfo);
-    printf("sent %d bytes to %s\n", numbytes, argv[1]);
     close(sockfd);
     return 0;
 }
